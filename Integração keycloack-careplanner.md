@@ -53,7 +53,6 @@ Este documento descreve a integração entre o **Keycloak** (Identity Provider) 
 
 ## 4. Arquitetura da Integração
 
-```mermaid
 flowchart TD
     A[Usuário / Frontend] --> B[CarePlanner]
     B --> C[Keycloak - OIDC Login]
@@ -63,3 +62,93 @@ flowchart TD
     F --> G[Busca Profissional + Organization]
     G --> H[Carrega Permissões Granulares]
     H --> I[PermissionService + Regras de Negócio]
+
+---
+
+## 5. Modelo de Dados Recomendado
+
+erDiagram
+    KC_USER {
+        string keycloak_user_id PK
+        string username
+        string email
+    }
+    PROFISSIONAL {
+        int id PK
+        string keycloak_user_id FK
+        string fhir_id
+        string email UK "UNIQUE NOT NULL"
+        int organization_id FK
+    }
+    ORGANIZATION {
+        int id PK
+        string fhir_id
+        string name
+        string type
+    }
+    PERMISSAO {
+        int id PK
+        string code "VIEW_PATIENT, EDIT_PRESCRIPTION..."
+        string description
+    }
+    PROFISSIONAL_PERMISSAO {
+        int profissional_id FK
+        int organization_id FK
+        int permissao_id FK
+        string scope "OWN|ORGANIZATION|ALL"
+    }
+
+    KC_USER ||--o{ PROFISSIONAL : "vincula"
+    PROFISSIONAL ||--o{ PROFISSIONAL_PERMISSAO : "possui"
+    ORGANIZATION ||--o{ PROFISSIONAL : "pertence"
+    PROFISSIONAL_PERMISSAO }o--|| PERMISSAO : "referencia"
+
+---
+
+## 6. Fases de Implementação
+
+**Fase 0: Preparação**
+- Auditar e corrigir emails duplicados/inválidos
+- Tornar `profissional.email` → `UNIQUE NOT NULL`
+- Criar Realm + Client no Keycloak
+- Configurar os 3 papéis grossos
+
+**Fase 1: Autenticação Dual**
+- Implementar `KeycloakJWTAuthentication`
+- Modo híbrido: JWT + Sessão Django legada
+- Binding por email + armazenamento do `keycloak_user_id`
+
+**Fase 2: Frontend**
+- Integrar `keycloak-js` no Kanban
+- Receber e tratar o Access Token
+
+**Fase 3: Autorização Granular**
+- Criar `PermissionService`
+- Migrar permissões do `settings.py` para o banco
+- Implementar regras baseadas em Profissional + Organização
+
+**Fase 4: Migração Final**
+- Remover autenticação Django legada
+- Migrar Painel Admin
+- Desativar `auth_user` (opcional)
+
+---
+
+## 7. Vantagens da Abordagem Híbrida
+
+- Keycloak mais leve e fácil de manter
+- Maior flexibilidade para regras específicas do domínio FHIR
+- Token JWT menor (melhor performance)
+- Redução significativa da dívida técnica
+- Preparação natural para SSO, MFA e multi-tenant futuro
+
+---
+
+**Próximos Passos Imediatos:**
+1. Realizar auditoria dos emails (`profissional.email`)
+2. Criar o Realm e Client no Keycloak
+3. Iniciar implementação da Fase 1
+
+---
+
+Documento alinhado com a visão discutida pelo time (modelo híbrido simplificado).
